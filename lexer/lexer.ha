@@ -2,8 +2,19 @@ use io;
 use strings;
 use fmt;
 
+def LPRN: u8 = 0x28; // "("
+def RPRN: u8 = 0x29; // ")"
+
+def WHSP: u8 = 0x20; //  " "
+def TABL: u8 = 0x09; // "\t"
+def NWLN: u8 = 0x0A; // "\n"
+
+def QUOT: u8 = 0x22; // "\""
+
+def SCLN: u8 = 0x3B; // ";"
+
 export type token = struct {
-	data: []rune,
+	string: str,
 	row: uint,
 	col: uint,
 };
@@ -11,91 +22,104 @@ export type token = struct {
 export type unmatched = !token;
 
 export type tokens = struct {
-	data: []token,
-	current_index: uint,
+	items: []token,
+	pos: uint,
 };
 
 export fn peek_token(ts: *tokens) (token | io::EOF) = {
-	if (ts.current_index >= len(ts.data)) {
+	if (ts.pos >= len(ts.items)) {
 		return io::EOF;
 	};
 
-	return ts.data[ts.current_index];
+	return ts.items[ts.pos];
 };
 
 export fn next_token(ts: *tokens) (token | io::EOF) = {
-	if (ts.current_index >= len(ts.data)) {
+	if (ts.pos >= len(ts.items)) {
 		return io::EOF;
 	};
-	const res = ts.data[ts.current_index];
-	ts.current_index += 1;
+	const res = ts.items[ts.pos];
+	ts.pos += 1;
 
 	return res;
 };
 
 type lexer = struct {
-	iter: strings::iterator,
+	data: []u8,
+	pos: uint,
 	row: uint,
 	col: uint,
 };
 
-export fn tokenize(input: *str) (tokens | unmatched) = {
+export fn tokenize(input: []u8) (tokens | unmatched) = {
 	let l = lexer {
-		iter = strings::iter(*input),
+		data = input,
+		pos = 0,
 		row = 1,
 		col = 1,
 	};
 
 	let tokens = tokens {
-		data = [],
-		current_index = 0,
+		items = alloc([], 0),
+		pos = 0,
 	};
 
 	for (true) {
 		let t: token = match (get_next_token(&l)) {
-		case let t_: token => yield t_;
+		case let ct: token => yield ct;
 		case void => continue;
 		case io::EOF => break;
-		case let u_: unmatched => return u_;
+		case let cu: unmatched => return cu;
 		};
 
-		append(tokens.data, t);
+		append(tokens.items, t);
 	};
 
 	return tokens;
 };
 
 fn get_next_token(l: *lexer) (token | unmatched | void | io::EOF) = {
-	let ch: rune = match(strings::next(&l.iter)) {
-	case let r_: rune => yield r_;
-	case void => return io::EOF;
+	if (l.pos >= len(l.data)) {
+		return io::EOF;
 	};
 
-	switch (ch) {
-	case ' ', '\t' =>
+	switch (l.data[l.pos]) {
+	case WHSP, TABL =>
 		l.col += 1;
+		l.pos += 1;
+
 		return void;
-	case '\n' =>
+	case NWLN =>
 		l.row += 1;
 		l.col = 1;
+		l.pos += 1;
+
 		return void;
-	case '(', ')' =>
+	case LPRN, RPRN =>
+		const s: str = strings::fromutf8_unsafe(l.data[l.pos .. l.pos + 1]);
 		let t: token = token {
-			data = alloc([ch...], 1),
+			string = s,
 			row = l.row,
 			col = l.col,
 		};
 		l.col += 1;
+		l.pos += 1;
 
 		return t;
 	case =>
+		const s: str = strings::fromutf8_unsafe(l.data[l.pos .. l.pos + 1]);
 		let t: token = token {
-			data = alloc([ch...], 1),
+			string = s,
 			row = l.row,
 			col = l.col,
 		};
 		l.col += 1;
+		l.pos += 1;
 
 		return t;
 	};
+};
+
+fn get_comment_token(l: *lexer) token = {
+
 };
