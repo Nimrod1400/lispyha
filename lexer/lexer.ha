@@ -200,4 +200,3 @@ fn get_word_token(l: *lexer) token = {
 		};
 	};
 };
-
