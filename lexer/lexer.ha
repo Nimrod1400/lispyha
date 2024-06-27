@@ -134,7 +134,7 @@ fn get_comment_token(l: *lexer) token = {
 		switch (l.data[l.pos + ofst]) {
 		case NWLN =>
 			const t: token = token {
-				string = strings::fromutf8_unsafe(l.data[l.pos .. l.pos + ofst - 1]),
+				string = strings::fromutf8_unsafe(l.data[l.pos .. l.pos + ofst]),
 				row = l.row,
 				col = l.col,
 			};
@@ -149,9 +149,10 @@ fn get_comment_token(l: *lexer) token = {
 	};
 };
 
+// TODO
 fn get_string_token(l: *lexer) (token | unmatched) = {
 	return token {
-		string = "123",
+		string = "\"Strings are not supported for now. Do not use them.\"",
 		col = 0,
 		row = 0,
 	};
@@ -200,3 +201,59 @@ fn get_word_token(l: *lexer) token = {
 		};
 	};
 };
+
+fn slice_lexer(l: *lexer, length: uint) token = {
+	return token {
+		string = strings::fromutf8_unsafe(l.data[l.pos .. l.pos + length]),
+		row = l.row,
+		col = l.col,
+	};
+};
+
+@test fn token_str_test() void = {
+	const input: [_]str = [
+	"(define (square x) (* x x))",                                          // 1
+	strings::concat(
+		";;; What is this?\n",
+		"(define (hello-world) (list (quote hello) (quote world)))\n"), // 2
+	strings::concat(
+		"(define PI 3.14159)\n",
+		";; Not sure if line above is correct.."),                      // 3
+	strings::concat(
+		"(import srfi-18)\n\n",
+		"(define (make-n-threads n)\n",
+		"(do ((i 0 (+ i 1)))\n"
+		"((= i n))\n"
+		"(thread-start! (make-thread (lambda () (display n))))))"),     // 4
+	];
+	const expected: [][]str = [
+	["(", "define", "(", "square", "x", ")", "(", "*", "x", "x", ")", ")"],                 // 1
+	[";;; What is this?",
+		"(", "define", "(", "hello-world", ")",
+		"(", "list", "(", "quote", "hello", ")", "(", "quote", "world", ")", ")", ")"], // 2
+	["(", "define", "PI", "3.14159", ")", ";; Not sure if line above is correct.."],        // 3
+	["(", "import", "srfi-18", ")",
+		"(", "define", "(", "make-n-threads", "n", ")",
+		"(", "do", "(", "(", "i", "0", "(", "+", "i", "1", ")", ")", ")",
+		"(", "(", "=", "i", "n", ")", ")",
+		"(", "thread-start!", "(", "make-thread", "(", "lambda", "(", ")",
+		"(", "display", "n", ")", ")", ")", ")", ")", ")"],                            // 4
+	];
+
+	assert(len(input) == len(expected));
+
+	for (let i = 0z; i < len(input); i += 1) {
+		const tokens = tokenize(strings::toutf8(input[i])) as tokens;
+		fmt::printfln("Test input {}\n: Tokens got: {}, and expected: {}", i, len(tokens.items), len(expected[i]))!;
+		assert(len(tokens.items) == len(expected[i]));
+
+		for (let j = 0z; j < len(expected[i]); j += 1) {
+			fmt::printfln("Token got: `{}`, and expected: `{}`", tokens.items[j].string, expected[i][j])!;
+			assert(tokens.items[j].string == expected[i][j]);
+		};
+	};
+};
+
+// @test fn token_loc_test() void = {
+
+// };
