@@ -2,16 +2,20 @@ use io;
 use strings;
 use fmt;
 
-def LPRN: u8 = 0x28; // "("
-def RPRN: u8 = 0x29; // ")"
+def DEF_STR_CAP: u8 = 16;
 
-def WHSP: u8 = 0x20; //  " "
-def TABL: u8 = 0x09; // "\t"
-def NWLN: u8 = 0x0A; // "\n"
+def LPRN: u8 = 0x28; // (
+def RPRN: u8 = 0x29; // )
 
-def QUOT: u8 = 0x22; // "\""
+def WHSP: u8 = 0x20; //    (whitespace :D)
+def TABL: u8 = 0x09; // \t
+def NWLN: u8 = 0x0A; // \n
 
-def SCLN: u8 = 0x3B; // ";"
+def QUOT: u8 = 0x22; // "
+
+def BCSL: u8 = 0x5C; // \
+
+def SCLN: u8 = 0x3B; // ;
 
 export type token = struct {
 	string: str,
@@ -149,12 +153,67 @@ fn get_comment_token(l: *lexer) token = {
 	};
 };
 
-// TODO
 fn get_string_token(l: *lexer) (token | unmatched) = {
-	return token {
-		string = "\"Strings are not supported for now. Do not use them.\"",
-		col = 0,
-		row = 0,
+	let ofst: uint = 1;
+	let row_offset: uint = 0;
+	let col_offset: uint = 0;
+
+	let buf: []u8 = alloc([], DEF_STR_CAP);
+	append(buf, QUOT);
+
+	for (true) {
+		if (l.pos + ofst >= len(l.data)) {
+			const u: unmatched = unmatched {
+				string = "UNMATCHED QUOTATION MARK",
+				row = l.row,
+				col = l.col,
+			};
+			l.pos += ofst;
+
+			return u;
+		};
+
+		switch (l.data[l.pos + ofst]) {
+		case NWLN =>
+			ofst += 1;
+			row_offset += 1;
+			col_offset = 0;
+		case BCSL =>
+			append(buf, get_escaped_char(l, ofst)); // TODO
+			ofst += 1;
+			col_offset += 1;
+		case QUOT =>
+			ofst += 1;
+			col_offset += 1;
+			break;
+		case =>
+			append(buf, l.data[l.pos + ofst]);
+			ofst += 1;
+			col_offset += 1;
+		};
+	};
+	append(buf, QUOT);
+
+	const t = token {
+		string = strings::fromutf8_unsafe(buf),
+		row = l.row,
+		col = l.col,
+	};
+
+	l.pos += ofst;
+	l.row += row_offset;
+	l.col += col_offset;
+
+	return t;
+};
+
+// TODO
+fn get_escaped_char(l: *lexer, ofst: uint) u8 = {
+	switch (l.data[l.pos + ofst + 1]) {
+	case 0x6E => return NWLN;
+	case 0x74 => return TABL;
+	case BCSL => return BCSL;
+	case QUOT => return QUOT;
 	};
 };
 
@@ -202,15 +261,7 @@ fn get_word_token(l: *lexer) token = {
 	};
 };
 
-fn slice_lexer(l: *lexer, length: uint) token = {
-	return token {
-		string = strings::fromutf8_unsafe(l.data[l.pos .. l.pos + length]),
-		row = l.row,
-		col = l.col,
-	};
-};
-
-@test fn token_str_test() void = {
+@test fn token_text_test() void = {
 	const input: [_]str = [
 	"(define (square x) (* x x))",                                          // 1
 	strings::concat(
