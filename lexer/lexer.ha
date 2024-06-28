@@ -2,12 +2,13 @@ use io;
 use strings;
 use fmt;
 
+def DEF_LMS_CAP: u8 = 128;
 def DEF_STR_CAP: u8 = 16;
 
 def LPRN: u8 = 0x28; // (
 def RPRN: u8 = 0x29; // )
 
-def WHSP: u8 = 0x20; //    (whitespace :D)
+def WHSP: u8 = 0x20; //    (whitespace)
 def TABL: u8 = 0x09; // \t
 def NWLN: u8 = 0x0A; // \n
 
@@ -17,76 +18,75 @@ def BCSL: u8 = 0x5C; // \
 
 def SCLN: u8 = 0x3B; // ;
 
-export type token = struct {
+export type lexeme = struct {
 	string: str,
 	row: uint,
 	col: uint,
 };
 
-export type unmatched = !token;
-
-export type tokens = struct {
-	items: []token,
+export type lexemes = struct {
+	items: []lexeme,
 	pos: uint,
 };
 
-export fn peek_token(ts: *tokens) (token | io::EOF) = {
-	if (ts.pos >= len(ts.items)) {
+export fn peek_lexeme(lms: *lexemes) (lexeme | io::EOF) = {
+	if (lms.pos >= len(lms.items)) {
 		return io::EOF;
 	};
 
-	return ts.items[ts.pos];
+	const lm = lms.items[lms.pos];
+
+	return lm;
 };
 
-export fn next_token(ts: *tokens) (token | io::EOF) = {
-	if (ts.pos >= len(ts.items)) {
+export fn next_lexeme(lms: *lexemes) (lexeme | io::EOF) = {
+	if (lms.pos >= len(lms.items)) {
 		return io::EOF;
 	};
-	const res = ts.items[ts.pos];
-	ts.pos += 1;
 
-	return res;
+	const lm = lms.items[lms.pos];
+	lms.pos += 1;
+
+	return lm;
 };
 
-type lexer = struct {
+type lexer_state = struct {
 	data: []u8,
 	pos: uint,
 	row: uint,
 	col: uint,
 };
 
-export fn tokenize(input: []u8) (tokens | unmatched) = {
-	let l = lexer {
+export fn lexicalize(input: []u8) lexemes = {
+	let l = lexer_state {
 		data = input,
 		pos = 0,
 		row = 1,
 		col = 1,
 	};
 
-	let tokens = tokens {
-		items = alloc([], 0),
+	let lms = lexemes {
+		items = alloc([], DEF_LMS_CAP),
 		pos = 0,
 	};
 
 	for (true) {
-		let t: token = match (get_next_token(&l)) {
-			case let ct: token => yield ct;
-			case void => continue;
-			case io::EOF => break;
-			case let cu: unmatched => return cu;
+		if (l.pos >= len(l.data)) {
+			break;
 		};
 
-		append(tokens.items, t);
+		let lm: lexeme = match (lexicalize_next(&l)) {
+			case let clm: lexeme => yield clm;
+			case void => continue;
+		};
+
+		append(lms.items, lm);
 	};
 
-	return tokens;
+	return lms;
 };
 
-fn get_next_token(l: *lexer) (token | unmatched | void | io::EOF) = {
-	if (l.pos >= len(l.data)) {
-		return io::EOF;
-	};
-
+fn lexicalize_next(l: *lexer_state) (lexeme | void) = {
 	switch (l.data[l.pos]) {
 	case WHSP, TABL =>
 		l.col += 1;
@@ -100,164 +100,83 @@ fn get_next_token(l: *lexer) (token | unmatched | void | io::EOF) = {
 
 		return void;
 	case LPRN, RPRN =>
-		const t: token = token {
-			string = strings::fromutf8_unsafe(l.data[l.pos .. l.pos + 1]),
-			row = l.row,
-			col = l.col,
-		};
-		l.col += 1;
-		l.pos += 1;
-
-		return t;
+		return lexicalize_paren(l);
 	case SCLN =>
-		return get_comment_token(l);
-	case QUOT =>
-		match (get_string_token(l)) {
-			case let ct: token => return ct;
-			case let cu: unmatched => return cu;
-		};
+		return lexicalize_comment(l);
 	case =>
-		return get_word_token(l);
+		return lexicalize_atom(l);
 	};
 };
 
-fn get_comment_token(l: *lexer) token = {
-	let ofst: uint = 1;
+fn lexicalize_paren(l: *lexer_state) lexeme = {
+	const lm: lexeme = get_lexeme(l, 1);
+	l.col += 1;
+	l.pos += 1;
+
+	return lm;
+};
+
+fn lexicalize_comment(l: *lexer_state) lexeme = {
+	let length: uint = 1;
 
 	for (true) {
-		if (l.pos + ofst >= len(l.data)) {
-			const t: token = token {
-				string = strings::fromutf8_unsafe(l.data[l.pos .. l.pos + ofst]),
-				row = l.row,
-				col = l.col,
-			};
-			l.pos += ofst + 1;
+		if (l.pos + length >= len(l.data)) {
+			const lm: lexeme = get_lexeme(l, length);
+			l.pos += length + 1;
 
-			return t;
+			return lm;
 		};
-		switch (l.data[l.pos + ofst]) {
+		switch (l.data[l.pos + length]) {
 		case NWLN =>
-			const t: token = token {
-				string = strings::fromutf8_unsafe(l.data[l.pos .. l.pos + ofst]),
-				row = l.row,
-				col = l.col,
-			};
+			const lm: lexeme = get_lexeme(l, length);
 			l.row += 1;
 			l.col = 1;
-			l.pos += ofst + 1;
+			l.pos += length + 1;
 
-			return t;
+			return lm;
 		case =>
-			ofst += 1;
+			length += 1;
 		};
 	};
 };
 
-fn get_string_token(l: *lexer) (token | unmatched) = {
-	let ofst: uint = 1;
-	let row_offset: uint = 0;
-	let col_offset: uint = 0;
-
-	let buf: []u8 = alloc([], DEF_STR_CAP);
-	append(buf, QUOT);
+fn lexicalize_atom(l: *lexer_state) lexeme = {
+	let length: uint = 1;
 
 	for (true) {
-		if (l.pos + ofst >= len(l.data)) {
-			const u: unmatched = unmatched {
-				string = "UNMATCHED QUOTATION MARK",
-				row = l.row,
-				col = l.col,
-			};
-			l.pos += ofst;
+		if (l.pos + length >= len(l.data)) {
+			const lm: lexeme = get_lexeme(l, length);
+			l.pos += length;
 
-			return u;
+			return lm;
 		};
 
-		switch (l.data[l.pos + ofst]) {
+		switch (l.data[l.pos + length]) {
+		case WHSP, TABL, LPRN, RPRN =>
+			const lm: lexeme = get_lexeme(l, length);
+
+			l.pos += length;
+			l.col += length;
+
+			return lm;
 		case NWLN =>
-			ofst += 1;
-			row_offset += 1;
-			col_offset = 0;
-		case BCSL =>
-			append(buf, get_escaped_char(l, ofst)); // TODO
-			ofst += 1;
-			col_offset += 1;
-		case QUOT =>
-			ofst += 1;
-			col_offset += 1;
-			break;
+			const lm: lexeme = get_lexeme(l, length);
+			l.pos += length;
+			l.col = 1;
+			l.row += 1;
+
+			return lm;
 		case =>
-			append(buf, l.data[l.pos + ofst]);
-			ofst += 1;
-			col_offset += 1;
+			length += 1;
 		};
 	};
-	append(buf, QUOT);
+};
 
-	const t = token {
-		string = strings::fromutf8_unsafe(buf),
+fn get_lexeme(l: *lexer_state, length: uint) lexeme = {
+	return lexeme {
+		string = strings::fromutf8_unsafe(l.data[l.pos .. l.pos + length]),
 		row = l.row,
 		col = l.col,
-	};
-
-	l.pos += ofst;
-	l.row += row_offset;
-	l.col += col_offset;
-
-	return t;
-};
-
-// TODO
-fn get_escaped_char(l: *lexer, ofst: uint) u8 = {
-	switch (l.data[l.pos + ofst + 1]) {
-	case 0x6E => return NWLN;
-	case 0x74 => return TABL;
-	case BCSL => return BCSL;
-	case QUOT => return QUOT;
-	};
-};
-
-fn get_word_token(l: *lexer) token = {
-	let ofst: uint = 1;
-
-	for (true) {
-		if (l.pos + ofst >= len(l.data)) {
-			const t: token = token {
-				string = strings::fromutf8_unsafe(l.data[l.pos .. l.pos + ofst]),
-				row = l.row,
-				col = l.col,
-			};
-			l.pos += ofst;
-
-			return t;
-		};
-
-		switch (l.data[l.pos + ofst]) {
-		case WHSP, TABL, LPRN, RPRN =>
-			const t: token = token {
-				string = strings::fromutf8_unsafe(l.data[l.pos .. l.pos + ofst]),
-				row = l.row,
-				col = l.col,
-			};
-
-			l.pos += ofst;
-			l.col += ofst;
-
-			return t;
-		case NWLN =>
-			const t: token = token {
-				string = strings::fromutf8_unsafe(l.data[l.pos .. l.pos + ofst]),
-				row = l.row,
-				col = l.col,
-			};
-			l.pos += ofst;
-			l.col = 1;
-			l.row += 1;
-
-			return t;
-		case =>
-			ofst += 1;
-		};
 	};
 };
 
@@ -294,13 +213,13 @@ fn get_word_token(l: *lexer) token = {
 	assert(len(input) == len(expected));
 
 	for (let i = 0z; i < len(input); i += 1) {
-		const tokens = tokenize(strings::toutf8(input[i])) as tokens;
-		fmt::printfln("Test input {}\n: Tokens got: {}, and expected: {}", i, len(tokens.items), len(expected[i]))!;
-		assert(len(tokens.items) == len(expected[i]));
+		const lms = lexicalize(strings::toutf8(input[i]));
+		fmt::printfln("Test input {}\n: Tokens got: {}, and expected: {}", i, len(lms.items), len(expected[i]))!;
+		assert(len(lms.items) == len(expected[i]));
 
 		for (let j = 0z; j < len(expected[i]); j += 1) {
-			fmt::printfln("Token got: `{}`, and expected: `{}`", tokens.items[j].string, expected[i][j])!;
-			assert(tokens.items[j].string == expected[i][j]);
+			fmt::printfln("Token got: `{}`, and expected: `{}`", lms.items[j].string, expected[i][j])!;
+			assert(lms.items[j].string == expected[i][j]);
 		};
 	};
 };
