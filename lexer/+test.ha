@@ -1,5 +1,3 @@
-use bufio;
-use fmt;
 use io;
 use os;
 use strings;
