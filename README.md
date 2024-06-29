@@ -1,6 +1,7 @@
 # lispyha
-This is a simple and slow LISP interpreter.  
-As for right now, I want my LISP to be as "orthogonal" as it possibly could be.  
-It will work only on Linux (BSD maybe?) since it is written in Hare.  
-Btw, you definitely should check out [Hare](https://harelang.org/).  
+I am trying to create my own LISP interpreter.  
+## Project status
+As for right now, the only thing that is implemented is lexer (not fully: strings are not tokenized yet) :D  
+## Additional info
+Written in [Hare](https://harelang.org/).  
 
