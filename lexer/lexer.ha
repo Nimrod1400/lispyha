@@ -17,8 +17,23 @@ def BCSL: u8 = 0x5C; // \
 
 def SCLN: u8 = 0x3B; // ;
 
+def A_CH: u8 = 0x61;
+def B_CH: u8 = 0x62;
+def E_CH: u8 = 0x65;
+def F_CH: u8 = 0x66;
+def N_CH: u8 = 0x6E;
+def R_CH: u8 = 0x72;
+def T_CH: u8 = 0x74;
+def V_CH: u8 = 0x76;
+
+export type string_type = enum {
+	REFERENCE,
+	ALLOCATION,
+};
+
 export type lexeme = struct {
 	string: str,
+	st: string_type,
 	row: uint,
 	col: uint,
 };
@@ -33,9 +48,9 @@ export fn peek_lexeme(lms: *lexemes) (lexeme | io::EOF) = {
 		return io::EOF;
 	};
 
-	const lm = lms.items[lms.pos];
+	const out = lms.items[lms.pos];
 
-	return lm;
+	return out;
 };
 
 export fn next_lexeme(lms: *lexemes) (lexeme | io::EOF) = {
@@ -43,10 +58,10 @@ export fn next_lexeme(lms: *lexemes) (lexeme | io::EOF) = {
 		return io::EOF;
 	};
 
-	const lm = lms.items[lms.pos];
+	const out = lms.items[lms.pos];
 	lms.pos += 1;
 
-	return lm;
+	return out;
 };
 
 type lexer_state = struct {
@@ -85,6 +100,14 @@ export fn lexicalize(input: []u8) lexemes = {
 	return lms;
 };
 
+export fn free_lexeme_content(lms: *lexeme...) void = {
+	for (let i = 0z; i < len(lms); i += 1) {
+		if (lms[i].st == string_type::ALLOCATION) {
+			free(lms[i].string);
+		};
+	};
+};
+
 fn lexicalize_next(l: *lexer_state) (lexeme | void) = {
 	switch (l.data[l.pos]) {
 	case WHSP, TABL =>
@@ -108,7 +131,7 @@ fn lexicalize_next(l: *lexer_state) (lexeme | void) = {
 };
 
 fn lexicalize_paren(l: *lexer_state) lexeme = {
-	const lm: lexeme = get_lexeme(l, 1);
+	const lm: lexeme = get_ref_lexeme(l, 1);
 	l.col += 1;
 	l.pos += 1;
 
@@ -120,14 +143,14 @@ fn lexicalize_comment(l: *lexer_state) lexeme = {
 
 	for (true) {
 		if (l.pos + length >= len(l.data)) {
-			const lm: lexeme = get_lexeme(l, length);
+			const lm: lexeme = get_ref_lexeme(l, length);
 			l.pos += length + 1;
 
 			return lm;
 		};
 		switch (l.data[l.pos + length]) {
 		case NWLN =>
-			const lm: lexeme = get_lexeme(l, length);
+			const lm: lexeme = get_ref_lexeme(l, length);
 			l.row += 1;
 			l.col = 1;
 			l.pos += length + 1;
@@ -142,13 +165,13 @@ fn lexicalize_comment(l: *lexer_state) lexeme = {
 fn lexicalize_atom(l: *lexer_state) lexeme = {
 	let length: uint = 1;
 
-	// if (l.data[l.pos] == QUOT) {
-	// 	return lexicalize_string(l);
-	// };
+	if (l.data[l.pos] == QUOT) {
+		return lexicalize_string(l);
+	};
 
 	for (true) {
 		if (l.pos + length >= len(l.data)) {
-			const lm: lexeme = get_lexeme(l, length);
+			const lm: lexeme = get_ref_lexeme(l, length);
 			l.pos += length;
 
 			return lm;
@@ -156,14 +179,14 @@ fn lexicalize_atom(l: *lexer_state) lexeme = {
 
 		switch (l.data[l.pos + length]) {
 		case WHSP, TABL, LPRN, RPRN =>
-			const lm: lexeme = get_lexeme(l, length);
+			const lm: lexeme = get_ref_lexeme(l, length);
 
 			l.pos += length;
 			l.col += length;
 
 			return lm;
 		case NWLN =>
-			const lm: lexeme = get_lexeme(l, length);
+			const lm: lexeme = get_ref_lexeme(l, length);
 			l.pos += length;
 			l.col = 1;
 			l.row += 1;
@@ -175,13 +198,93 @@ fn lexicalize_atom(l: *lexer_state) lexeme = {
 	};
 };
 
-// fn lexicalize_string(l: *lexer_state) lexeme = {
-// 	let length: uint = 1;
-// };
+fn lexicalize_string(l: *lexer_state) lexeme = {
+	let off: uint = 1;
 
-fn get_lexeme(l: *lexer_state, length: uint) lexeme = {
+	let row_offset: uint = 0;
+	let col_offset: uint = 1;
+
+	let s: []u8 = alloc([], DEF_STR_CAP);
+	append(s, QUOT);
+
+	for (true) {
+		if (l.pos + off >= len(l.data)) {
+			break;
+		};
+
+		switch (l.data[l.pos + off]) {
+		case QUOT =>
+			col_offset += 1;
+			append(s, QUOT);
+			break;
+		case NWLN =>
+			off += 1;
+			row_offset += 1;
+			col_offset = 0;
+			l.col = 0;
+		case BCSL =>
+			const ch: u8 = match (get_escaped_char(l, &off)) {
+				case let cch: u8 =>
+					yield cch;
+				case not_escape =>
+					off += 1;
+					l.col += 1;
+					yield BCSL;
+			};
+			append(s, ch);
+		case =>
+			off += 1;
+			col_offset += 1;
+			append(s, l.data[l.pos + off]);
+		};
+	};
+
+
+	const lm = lexeme {
+		string = strings::fromutf8_unsafe(s),
+		st = string_type::ALLOCATION,
+		row = l.row,
+		col = l.col,
+	};
+	l.row += row_offset;
+	l.col += col_offset;
+
+	return lm;
+};
+
+type not_escape = !void;
+
+fn get_escaped_char(l: *lexer_state, off: *uint) (u8 | not_escape) = {
+	let out: (u8 | not_escape) = not_escape;
+
+	if (l.pos + *off + 1 >= len(l.data)) {
+		return out;
+	};
+
+	switch (l.data[l.pos + *off + 1]) {
+	case A_CH => out = 0x07;
+	case B_CH => out = 0x08;
+	case E_CH => out = 0x1B;
+	case F_CH => out = 0x0C;
+	case N_CH => out = NWLN;
+	case R_CH => out = 0x0D;
+	case T_CH => out = 0x09;
+	case V_CH => out = 0x0B;
+	case BCSL => out = BCSL;
+	case QUOT => out = QUOT;
+	case => return out;
+	};
+
+	*off += 2;
+	l.col += 2;
+
+	return out;
+};
+
+fn get_ref_lexeme(l: *lexer_state, length: uint) lexeme = {
 	return lexeme {
 		string = strings::fromutf8_unsafe(l.data[l.pos .. l.pos + length]),
+		st = string_type::REFERENCE,
 		row = l.row,
 		col = l.col,
 	};
