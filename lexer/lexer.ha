@@ -1,5 +1,6 @@
 use io;
 use strings;
+use fmt;
 
 def DEF_LMS_CAP: u8 = 128;
 def DEF_STR_CAP: u8 = 16;
@@ -214,6 +215,8 @@ fn lexicalize_string(l: *lexer_state) lexeme = {
 
 		switch (l.data[l.pos + off]) {
 		case QUOT =>
+			fmt::println("Should be done")!;
+			off += 1;
 			col_offset += 1;
 			append(s, QUOT);
 			break;
@@ -233,12 +236,13 @@ fn lexicalize_string(l: *lexer_state) lexeme = {
 			};
 			append(s, ch);
 		case =>
+			append(s, l.data[l.pos + off]);
 			off += 1;
 			col_offset += 1;
-			append(s, l.data[l.pos + off]);
 		};
 	};
 
+	l.pos += len(s): uint;
 
 	const lm = lexeme {
 		string = strings::fromutf8_unsafe(s),
@@ -246,6 +250,7 @@ fn lexicalize_string(l: *lexer_state) lexeme = {
 		row = l.row,
 		col = l.col,
 	};
+
 	l.row += row_offset;
 	l.col += col_offset;
 
