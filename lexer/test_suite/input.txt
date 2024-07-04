@@ -21,3 +21,11 @@ abc
 	(thread-start! (make-thread (lambda () (display n))))))
 ---
 (define hw "Hello, world!")
+---
+(define help-message
+"Usage: \n
+./lispyha <args> \n
+Where <args> is one of the following: \n
+foo - do \"foo\" thingy; \n
+bar - do \"bar\" thingy. \n\n
+It is as simple as that! \n")
