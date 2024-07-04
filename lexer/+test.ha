@@ -14,10 +14,17 @@ def EXPECTED_FILENAME: str = "lexer/test_suite/expected.txt";
 
 	for (let i = 0z; i < len(input); i += 1) {
 		const lms = lexicalize(strings::toutf8(input[i]));
+
+		fmt::printfln("len(input) = {}, len(expected) = {}", len(lms.items), len(expected[i]))!;
+
+		for (let i = 0z; i < len(lms.items); i += 1) {
+			fmt::printfln("{}: {}", i, lms.items[i].string)!;
+		};
 		assert(len(lms.items) == len(expected[i]));
 
 		for (let j = 0z; j < len(expected[i]); j += 1) {
 			assert(lms.items[j].string == expected[i][j]);
+			fmt::printfln("I: \"{}\", E: \"{}\"", lms.items[j].string, expected[i][j])!;
 		};
 	};
 };
@@ -57,7 +64,9 @@ def EXPECTED_FILENAME: str = "lexer/test_suite/expected.txt";
 			(5, 54), (5, 55), (5, 56),
 
 		],
-
+		[
+			(1, 1), (1, 2), (1, 9), (1, 12), (1, 27),
+		],
 
 	];
 
@@ -86,10 +95,10 @@ fn form_expected_bundle(filename: str) [][]str = {
 	const input = os::open(filename)!;
 	const input = io::drain(input)!;
 	const input = strings::fromutf8(input)!;
-	const input = strings::split(input, "---");
+	const input = strings::split(input, "---\n");
 
 	for (let i = 0z; i < len(input); i += 1) {
-		const line: []str = strings::split(input[i], "\n");
+		const line: []str = strings::split(input[i], "|\n");
 		append(result, []);
 		for (let j = 0z; j < len(line); j += 1) {
 			if (line[j] != "") {
