@@ -19,3 +19,5 @@ abc
 	(do ((i 0 (+ i 1)))
 	((= i n))
 	(thread-start! (make-thread (lambda () (display n))))))
+---
+(define hw "Hello, world!")

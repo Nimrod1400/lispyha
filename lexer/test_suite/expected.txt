@@ -83,3 +83,9 @@ n
 )
 )
 )
+---
+(
+define
+hw
+"Hello, world!"
+)
