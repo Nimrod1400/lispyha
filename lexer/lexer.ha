@@ -215,10 +215,9 @@ fn lexicalize_string(l: *lexer_state) lexeme = {
 
 		switch (l.data[l.pos + off]) {
 		case QUOT =>
-			fmt::println("Should be done")!;
+			append(s, QUOT);
 			off += 1;
 			col_offset += 1;
-			append(s, QUOT);
 			break;
 		case NWLN =>
 			off += 1;
@@ -226,12 +225,14 @@ fn lexicalize_string(l: *lexer_state) lexeme = {
 			col_offset = 0;
 			l.col = 0;
 		case BCSL =>
-			const ch: u8 = match (get_escaped_char(l, &off)) {
+			const ch: u8 = match (get_escaped_char(l, off)) {
 				case let cch: u8 =>
+					off += 2;
+					col_offset += 2;
 					yield cch;
 				case not_escape =>
 					off += 1;
-					l.col += 1;
+					col_offset += 1;
 					yield BCSL;
 			};
 			append(s, ch);
@@ -242,7 +243,7 @@ fn lexicalize_string(l: *lexer_state) lexeme = {
 		};
 	};
 
-	l.pos += len(s): uint;
+	l.pos += off;
 
 	const lm = lexeme {
 		string = strings::fromutf8_unsafe(s),
@@ -259,14 +260,14 @@ fn lexicalize_string(l: *lexer_state) lexeme = {
 
 type not_escape = !void;
 
-fn get_escaped_char(l: *lexer_state, off: *uint) (u8 | not_escape) = {
+fn get_escaped_char(l: *lexer_state, off: uint) (u8 | not_escape) = {
 	let out: (u8 | not_escape) = not_escape;
 
-	if (l.pos + *off + 1 >= len(l.data)) {
+	if (l.pos + off + 1 >= len(l.data)) {
 		return out;
 	};
 
-	switch (l.data[l.pos + *off + 1]) {
+	switch (l.data[l.pos + off + 1]) {
 	case A_CH => out = 0x07;
 	case B_CH => out = 0x08;
 	case E_CH => out = 0x1B;
@@ -279,9 +280,6 @@ fn get_escaped_char(l: *lexer_state, off: *uint) (u8 | not_escape) = {
 	case QUOT => out = QUOT;
 	case => return out;
 	};
-
-	*off += 2;
-	l.col += 2;
 
 	return out;
 };
