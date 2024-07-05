@@ -35,10 +35,14 @@ def EXPECTED_POSITIONS_FILENAME: str = "lexer/test_suite/expected_positions.txt"
 	const input: []str = form_input_bundle(INPUT_FILENAME);
 	const expected: [][](uint, uint) = form_expected_position_bundle(EXPECTED_POSITIONS_FILENAME);
 
-	for (let i = 0z; i < 7; i += 1) {
+	for (let i = 0z; i < len(input); i += 1) {
 		const lms = lexicalize(strings::toutf8(input[i]));
 
 		for (let j = 0z; j < len(expected[i]); j += 1) {
+			fmt::printfln("Got: ({}, {}), Exp: ({}, {})",
+				lms.items[j].row, lms.items[j].col,
+				expected[i][j].0, expected[i][j].1)!;
+
 			assert(lms.items[j].row == expected[i][j].0);
 			assert(lms.items[j].col == expected[i][j].1);
 		};

@@ -22,7 +22,7 @@ abc
 ---
 (define hw "Hello, world!")
 ---
-(define help-message
+(define help-message 
 "Usage: \n
 ./lispyha <args> \n
 Where <args> is one of the following: \n
