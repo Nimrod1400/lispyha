@@ -27,14 +27,14 @@ def R_CH: u8 = 0x72;
 def T_CH: u8 = 0x74;
 def V_CH: u8 = 0x76;
 
-export type string_type = enum {
+export type literal_type = enum {
 	REFERENCE,
 	ALLOCATION,
 };
 
 export type lexeme = struct {
-	string: str,
-	st: string_type,
+	literal: str,
+	st: literal_type,
 	row: uint,
 	col: uint,
 };
@@ -54,7 +54,7 @@ export fn peek_lexeme(lms: *lexemes) (lexeme | io::EOF) = {
 	return out;
 };
 
-export fn next_lexeme(lms: *lexemes) (lexeme | io::EOF) = {
+export fn read_lexeme(lms: *lexemes) (lexeme | io::EOF) = {
 	if (lms.pos >= len(lms.items)) {
 		return io::EOF;
 	};
@@ -103,8 +103,8 @@ export fn lexicalize(input: []u8) lexemes = {
 
 export fn free_lexeme_content(lms: *lexeme...) void = {
 	for (let i = 0z; i < len(lms); i += 1) {
-		if (lms[i].st == string_type::ALLOCATION) {
-			free(lms[i].string);
+		if (lms[i].st == literal_type::ALLOCATION) {
+			free(lms[i].literal);
 		};
 	};
 };
@@ -246,8 +246,8 @@ fn lexicalize_string(l: *lexer_state) lexeme = {
 	l.pos += off;
 
 	const lm = lexeme {
-		string = strings::fromutf8_unsafe(s),
-		st = string_type::ALLOCATION,
+		literal = strings::fromutf8_unsafe(s),
+		st = literal_type::ALLOCATION,
 		row = l.row,
 		col = l.col,
 	};
@@ -260,6 +260,7 @@ fn lexicalize_string(l: *lexer_state) lexeme = {
 
 type not_escape = !void;
 
+// TODO: maybe hashmap?
 fn get_escaped_char(l: *lexer_state, off: uint) (u8 | not_escape) = {
 	let out: (u8 | not_escape) = not_escape;
 
@@ -286,8 +287,8 @@ fn get_escaped_char(l: *lexer_state, off: uint) (u8 | not_escape) = {
 
 fn get_ref_lexeme(l: *lexer_state, length: uint) lexeme = {
 	return lexeme {
-		string = strings::fromutf8_unsafe(l.data[l.pos .. l.pos + length]),
-		st = string_type::REFERENCE,
+		literal = strings::fromutf8_unsafe(l.data[l.pos .. l.pos + length]),
+		st = literal_type::REFERENCE,
 		row = l.row,
 		col = l.col,
 	};
