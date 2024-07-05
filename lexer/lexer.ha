@@ -202,8 +202,10 @@ fn lexicalize_atom(l: *lexer_state) lexeme = {
 fn lexicalize_string(l: *lexer_state) lexeme = {
 	let off: uint = 1;
 
-	let row_offset: uint = 0;
-	let col_offset: uint = 1;
+	const str_row = l.row;
+	const str_col = l.col;
+
+	l.col += 1;
 
 	let s: []u8 = alloc([], DEF_STR_CAP);
 	append(s, QUOT);
@@ -217,29 +219,28 @@ fn lexicalize_string(l: *lexer_state) lexeme = {
 		case QUOT =>
 			append(s, QUOT);
 			off += 1;
-			col_offset += 1;
+			l.col += 1;
 			break;
 		case NWLN =>
 			off += 1;
-			row_offset += 1;
-			col_offset = 0;
-			l.col = 0;
+			l.col = 1;
+			l.row += 1;
 		case BCSL =>
 			const ch: u8 = match (get_escaped_char(l, off)) {
 				case let cch: u8 =>
 					off += 2;
-					col_offset += 2;
+					l.col += 2;
 					yield cch;
 				case not_escape =>
 					off += 1;
-					col_offset += 1;
+					l.col += 1;
 					yield BCSL;
 			};
 			append(s, ch);
 		case =>
 			append(s, l.data[l.pos + off]);
 			off += 1;
-			col_offset += 1;
+			l.col += 1;
 		};
 	};
 
@@ -248,12 +249,9 @@ fn lexicalize_string(l: *lexer_state) lexeme = {
 	const lm = lexeme {
 		literal = strings::fromutf8_unsafe(s),
 		st = literal_type::ALLOCATION,
-		row = l.row,
-		col = l.col,
+		row = str_row,
+		col = str_col,
 	};
-
-	l.row += row_offset;
-	l.col += col_offset;
 
 	return lm;
 };
